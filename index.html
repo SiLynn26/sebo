@@ -299,3 +299,43 @@
 
                         if (totalScore >= threshold) {
                             foundSimilar = true;
+                            const resultItem = document.createElement('div');
+                            resultItem.className = 'bg-gray-50 p-4 rounded-lg border border-gray-200';
+                            resultItem.innerHTML = `
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="font-medium text-gray-900">종합 유사도: <span class="text-[#ff4b4b] font-bold">${totalScore}%</span></h3>
+                                    <span class="text-xs text-gray-500">(pHash: ${Math.round(pHashSim)}%, 구조: ${Math.round(structSim)}%)</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="flex flex-col items-center">
+                                        <img src="${img1.dataUrl}" alt="${img1.name}" class="max-h-48 object-contain mb-2 border border-gray-300 rounded bg-white">
+                                        <span class="text-xs text-gray-600 truncate w-full text-center" title="${img1.name}">${img1.name}</span>
+                                    </div>
+                                    <div class="flex flex-col items-center">
+                                        <img src="${img2.dataUrl}" alt="${img2.name}" class="max-h-48 object-contain mb-2 border border-gray-300 rounded bg-white">
+                                        <span class="text-xs text-gray-600 truncate w-full text-center" title="${img2.name}">${img2.name}</span>
+                                    </div>
+                                </div>
+                            `;
+                            resultsArea.appendChild(resultItem);
+                        }
+                    }
+                }
+
+                if (!foundSimilar) {
+                    showInfo(`기준 점수(${threshold}%) 이상 비슷한 사진이 없습니다.`);
+                } else {
+                    resultsSection.classList.remove('hidden');
+                }
+
+            } catch (error) {
+                showWarning("사진 처리 중 오류가 발생했습니다.");
+            } finally {
+                loadingArea.classList.add('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+    </script>
+</body>
+</html>
