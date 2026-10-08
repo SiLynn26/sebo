@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사진 유사도 확인</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #ffffff;
+            color: #31333F; /* Streamlit default text color */
+        }
+
+        /* Custom styling for the slider to look slightly more like Streamlit */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #ff4b4b; /* Streamlit primary color */
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 2px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+
+        /* Custom file input styling */
+        input[type=file]::file-selector-button {
+            border: 1px solid #d1d5db;
+            background-color: #ffffff;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            color: #374151;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-right: 1rem;
+        }
+        input[type=file]::file-selector-button:hover {
+            background-color: #f9fafb;
+        }
+        
+        /* Spinner animation */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #ff4b4b;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen py-10 px-4 sm:px-6 lg:px-8 flex justify-center">
+
+    <div class="w-full max-w-3xl">
+        
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold tracking-tight mb-2 text-gray-900">사진 유사도 확인</h1>
+            <p class="text-lg text-gray-600">세보엠이씨 아산 A4-2L PH3 일반배관,덕트공사</p>
+        </header>
+
+        <!-- Form Area (Streamlit st.form equivalent) -->
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+                <span>### ⚙️ 검사 설정</span>
+            </h2>
+
+            <div class="space-y-6">
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label for="threshold" class="block text-sm font-medium text-gray-700">
+                            최소 유사도 기준 (%) - 선택한 점수 이상으로 비슷한 사진만 보여줍니다.
+                        </label>
+                        <span id="thresholdValue" class="text-sm font-semibold text-gray-900">70</span>
+                    </div>
+                    <input type="range" id="threshold" min="0" max="100" value="70" class="w-full">
+                </div>
+
+                <div>
+                    <label for="fileInput" class="block text-sm font-medium text-gray-700 mb-2">
+                        사진을 여러 장 업로드하세요
+                    </label>
+                    <div class="flex items-center justify-center w-full">
+                        <input class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border file:border-gray-300 file:text-sm file:font-medium file:bg-white file:text-gray-700 hover:file:bg-gray-50 cursor-pointer border border-gray-200 rounded-lg p-2" 
+                               id="fileInput" type="file" multiple accept=".jpg, .jpeg, .png">
+                    </div>
+                </div>
+
+                <div>
+                    <button id="submitBtn" class="w-full sm:w-auto px-6 py-2 bg-[#ff4b4b] hover:bg-[#ff3333] text-white font-medium rounded-md shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ff4b4b] flex items-center justify-center">
+                        🔍 검사하기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages Area -->
+        <div id="messagesArea" class="mb-8 empty:hidden"></div>
+
+        <!-- Loading Area -->
+        <div id="loadingArea" class="hidden mb-8 p-4 bg-gray-50 text-gray-700 rounded-lg border border-gray-200 flex items-center">
+            <div class="loader"></div>
+            <span>사진들을 비교하고 있습니다. 잠시만 기다려주세요...</span>
+        </div>
+
+        <!-- Results Area -->
+        <div id="resultsSection" class="hidden">
+            <h2 class="text-xl font-semibold mb-2">### 🔍 비교 결과</h2>
+            <hr class="border-gray-200 mb-6">
+            <div id="resultsArea" class="space-y-8">
+                <!-- Results will be injected here -->
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // DOM Elements
+        const thresholdSlider = document.getElementById('threshold');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const fileInput = document.getElementById('fileInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const messagesArea = document.getElementById('messagesArea');
+        const loadingArea = document.getElementById('loadingArea');
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsArea = document.getElementById('resultsArea');
+
+        // Update slider value display
+        thresholdSlider.addEventListener('input', function() {
+            thresholdValue.textContent = this.value;
+        });
+
+        // UI Message Helpers
+        function showWarning(message) {
+            messagesArea.innerHTML = `
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-md">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-yellow-700">${message}</p>
+                        </div>
+                    </div>
+                </div>`;
+            messagesArea.classList.remove('hidden');
+        }
+
+        function showInfo(message) {
+            messagesArea.innerHTML = `
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-md">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-blue-700">${message}</p>
+                        </div>
+                    </div>
+                </div>`;
+            messagesArea.classList.remove('hidden');
+        }
+
+        function clearMessages() {
+            messagesArea.innerHTML = '';
+            messagesArea.classList.add('hidden');
+        }
+
+        /**
+         * Calculates a simple perceptual hash (aHash) for an image file.
+         * 1. Shrinks image to 8x8.
+         * 2. Converts to grayscale.
+         * 3. Calculates average color.
+         * 4. Creates 64-bit string based on > average.
+         */
+        async function calculateHash(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 8;
+                        canvas.height = 8;
+                        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                        
+                        // Draw image shrunk to 8x8
+                        ctx.drawImage(img, 0, 0, 8, 8);
+                        const imageData = ctx.getImageData(0, 0, 8, 8);
+                        const data = imageData.data;
+
+                        let grayscaleValues = [];
+                        let total = 0;
+
+                        // Calculate grayscale for each pixel
+                        for (let i = 0; i < data.length; i += 4) {
+                            // Standard luminance formula
+                            const gray = (data[i] * 0.299) + (data[i+1] * 0.587) + (data[i+2] * 0.114);
+                            grayscaleValues.push(gray);
+                            total += gray;
+                        }
+
+                        // Calculate average
+                        const average = total / 64;
+
+                        // Create 64-bit hash string
+                        let hash = '';
+                        for (let i = 0; i < 64; i++) {
+                            hash += grayscaleValues[i] >= average ? '1' : '0';
+                        }
+
+                        resolve({
+                            name: file.name,
+                            hash: hash,
+                            dataUrl: e.target.result // Keep dataUrl for rendering later
+                        });
+                    };
+                    img.onerror = () => reject(new Error("Failed to load image: " + file.name));
+                    img.src = e.target.result;
+                };
+                reader.onerror = () => reject(new Error("Failed to read file: " + file.name));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        /**
+         * Calculates Hamming distance between two 64-bit strings
+         * and converts it to a percentage similarity.
+         */
+        function calculateSimilarity(hash1, hash2) {
+            let distance = 0;
+            for (let i = 0; i < 64; i++) {
+                if (hash1[i] !== hash2[i]) {
+                    distance++;
+                }
+            }
+            // Math matches Python logic: int((64 - diff) / 64 * 100)
+            return Math.max(0, Math.floor(((64 - distance) / 64) * 100));
+        }
+
+        // Main Execution Logic
+        submitBtn.addEventListener('click', async () => {
+            const files = fileInput.files;
+            const threshold = parseInt(thresholdSlider.value, 10);
+
+            // Clear previous state
+            clearMessages();
+            resultsSection.classList.add('hidden');
+            resultsArea.innerHTML = '';
+
+            // Validation: Minimum 2 images
+            if (!files || files.length < 2) {
+                showWarning("비교하려면 최소 2장 이상의 사진을 업로드해야 합니다!");
+                return;
+            }
+
+            // UI State: Loading
+            loadingArea.classList.remove('hidden');
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            try {
+                // Process all images to get their hashes
+                const processPromises = Array.from(files).map(file => calculateHash(file));
+                const processedImages = await Promise.all(processPromises);
+
+                let foundSimilar = false;
+
+                // Compare all pairs (i and j where j > i)
+                for (let i = 0; i < processedImages.length; i++) {
+                    for (let j = i + 1; j < processedImages.length; j++) {
+                        const img1 = processedImages[i];
+                        const img2 = processedImages[j];
+
+                        const similarityScore = calculateSimilarity(img1.hash, img2.hash);
+
+                        if (similarityScore >= threshold) {
+                            foundSimilar = true;
+                            
+                            // Create result HTML block
+                            const resultItem = document.createElement('div');
+                            resultItem.className = "flex flex-col gap-3";
+                            
+                            // Success message for the pair
+                            const successMsg = document.createElement('div');
+                            successMsg.className = "bg-green-50 border border-green-200 p-3 rounded-md text-green-800 font-medium";
+                            successMsg.innerHTML = `✅ **${img1.name}** 와 **${img2.name}** (유사도: ${similarityScore}%)`;
+                            
+                            // Images side-by-side
+                            const imagesGrid = document.createElement('div');
+                            imagesGrid.className = "grid grid-cols-2 gap-4";
+                            
+                            const imgCol1 = `
+                                <div class="flex flex-col gap-1">
+                                    <img src="${img1.dataUrl}" alt="${img1.name}" class="w-full h-auto rounded border border-gray-200 object-contain max-h-64 bg-gray-50">
+                                    <span class="text-xs text-gray-500 text-center truncate">${img1.name}</span>
+                                </div>`;
+                                
+                            const imgCol2 = `
+                                <div class="flex flex-col gap-1">
+                                    <img src="${img2.dataUrl}" alt="${img2.name}" class="w-full h-auto rounded border border-gray-200 object-contain max-h-64 bg-gray-50">
+                                    <span class="text-xs text-gray-500 text-center truncate">${img2.name}</span>
+                                </div>`;
+                                
+                            imagesGrid.innerHTML = imgCol1 + imgCol2;
+                            
+                            resultItem.appendChild(successMsg);
+                            resultItem.appendChild(imagesGrid);
+                            
+                            // Add a subtle divider if it's not the first item
+                            if (resultsArea.children.length > 0) {
+                                const divider = document.createElement('hr');
+                                divider.className = "border-gray-100 my-6 border-dashed";
+                                resultsArea.appendChild(divider);
+                            }
+                            
+                            resultsArea.appendChild(resultItem);
+                        }
+                    }
+                }
+
+                // UI State: Done Loading
+                loadingArea.classList.add('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+                // Show results or info message
+                if (!foundSimilar) {
+                    showInfo(`현재 기준(${threshold}%) 이상으로 비슷한 사진 짝이 없습니다. 기준을 낮추고 다시 '검사하기'를 눌러보세요!`);
+                } else {
+                    resultsSection.classList.remove('hidden');
+                }
+
+            } catch (error) {
+                console.error("Error processing images:", error);
+                loadingArea.classList.add('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                showWarning("이미지를 처리하는 중 오류가 발생했습니다. 지원되는 이미지 형식인지 확인해주세요.");
+            }
+        });
+    </script>
+</body>
+</html>
